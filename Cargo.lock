@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "rust-template"
+name = "mototp"
 version = "0.0.1"

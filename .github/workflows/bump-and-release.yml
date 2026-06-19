@@ -66,7 +66,7 @@ jobs:
           set -euo pipefail
           CURRENT=$(cargo read-manifest | jq -r .version)
           BASE_CURRENT=${CURRENT%%-*}
-          IFS=. read MAJ MIN PAT <<< "$BASE_CURRENT"
+          IFS=. read -r MAJ MIN PAT <<< "$BASE_CURRENT"
           case "$BUMP_LEVEL" in
             patch) NEXT_BASE="$MAJ.$MIN.$((PAT+1))" ;;
             minor) NEXT_BASE="$MAJ.$((MIN+1)).0" ;;
@@ -79,9 +79,7 @@ jobs:
           else
             NEXT="${NEXT_BASE}"
           fi
-          # --workspace bumps every member, including crates that inherit the
-          # version via version.workspace = true. A lone package is a one-member
-          # workspace, so this is also correct for the single-crate layout.
+          # --workspace also covers the single-crate layout (a one-member workspace).
           cargo set-version --workspace "$NEXT"
           echo "next=$NEXT" >> "$GITHUB_OUTPUT"
 

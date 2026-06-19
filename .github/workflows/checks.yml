@@ -2,9 +2,9 @@ name: Checks
 
 # Reusable gate: fmt, clippy and tests on the dev toolchain, auto-installed by
 # rustup from rust-toolchain.toml. Deleting that file silently falls back to
-# the runner's bundled Rust. Called by bump-and-release and the publish
-# workflows so nothing ships without passing checks, even if a tag points at a
-# commit that never went through the PR CI. Jobs run in parallel.
+# the runner's bundled Rust. Called by bump-and-release so nothing ships
+# without passing checks, even if a tag points at a commit that never went
+# through the PR CI. Jobs run in parallel.
 #
 # This is a smoke gate on the dev toolchain only; the full version x distro
 # matrix runs in ci.yml on PRs.
