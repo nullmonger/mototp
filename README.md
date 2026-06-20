@@ -36,8 +36,8 @@ for the first release rather than what ships today.
 
 ## Built with
 
-Rust and Dioxus, targeting desktop (Linux, macOS, Windows) and Android in the
-MVP, with iOS to follow.
+Rust and Dioxus, targeting Linux desktop and Android in the MVP, with macOS,
+Windows and iOS to follow.
 
 ## License
 

@@ -7,3 +7,8 @@ repository = "https://github.com/nullmonger/mototp"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+data-encoding = "2"
+hmac = "0.12"
+sha1 = "0.10"
+sha2 = "0.10"
+thiserror = "2.0.18"
