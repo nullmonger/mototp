@@ -84,6 +84,17 @@ fn truncate(mac: &[u8], digits: u32) -> String {
     format!("{code:0width$}", width = digits as usize)
 }
 
+// Single source of truth for the supported code length. Values outside 6..=8
+// overflow the modulo in truncate or produce a meaningless code; hotp itself
+// stays unguarded, so every entry point validates through here first.
+pub(crate) fn validate_digits(digits: u32) -> Result<(), OtpError> {
+    if (6..=8).contains(&digits) {
+        Ok(())
+    } else {
+        Err(OtpError::UnsupportedDigits)
+    }
+}
+
 pub fn hotp(algorithm: Algorithm, secret: &[u8], counter: u64, digits: u32) -> String {
     // Counter is the 8-byte big-endian moving factor (RFC 4226 section 5.1).
     let mac = hmac_digest(algorithm, secret, &counter.to_be_bytes());
@@ -101,11 +112,7 @@ pub fn totp_at(params: &OtpParams, secret: &[u8], unix_time: u64) -> Result<Totp
     if params.period == 0 {
         return Err(OtpError::ZeroPeriod);
     }
-    // Reject digits outside 6..=8: such values overflow the modulo
-    // or produce a meaningless code.
-    if !(6..=8).contains(&params.digits) {
-        return Err(OtpError::UnsupportedDigits);
-    }
+    validate_digits(params.digits)?;
     let elapsed = unix_time.saturating_sub(params.t0);
     let counter = elapsed / params.period;
     // At a window boundary the remainder is 0, so a full period is reported left.
