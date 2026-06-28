@@ -112,6 +112,38 @@ pub fn parse(uri: &str) -> Result<Entry, ParseError> {
     })
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct LineError {
+    pub line: usize,
+    pub error: ParseError,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct ParseReport {
+    pub entries: Vec<Entry>,
+    pub errors: Vec<LineError>,
+}
+
+// Accumulate per-line errors instead of failing on the first bad line,
+// so one broken line does not drop the rest of an import.
+pub fn parse_list(input: &str) -> ParseReport {
+    let mut report = ParseReport::default();
+    for (index, line) in input.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        match parse(line) {
+            Ok(entry) => report.entries.push(entry),
+            Err(error) => report.errors.push(LineError {
+                line: index + 1,
+                error,
+            }),
+        }
+    }
+    report
+}
+
 // Percent-decoded query parameters. First occurrence of a key wins.
 struct QueryParams(Vec<(String, String)>);
 
@@ -232,5 +264,62 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(entry.code_at(0).unwrap(), "755224");
+    }
+
+    #[test]
+    fn rejects_invalid_uris_with_distinct_causes() {
+        let valid = format!("secret={SECRET_B32}");
+        let cases = vec![
+            ("https://example.com".to_string(), ParseError::NotOtpauth),
+            ("otpauth://weird/a".to_string(), ParseError::UnknownType),
+            ("otpauth://totp/a".to_string(), ParseError::MissingSecret),
+            (
+                "otpauth://totp/a?secret=@@@".to_string(),
+                ParseError::MalformedSecret,
+            ),
+            (
+                format!("otpauth://hotp/a?{valid}"),
+                ParseError::MissingCounter,
+            ),
+            (
+                format!("otpauth://totp/a?{valid}&digits=abc"),
+                ParseError::InvalidNumber,
+            ),
+            (
+                format!("otpauth://totp/a?{valid}&digits=9"),
+                ParseError::UnsupportedDigits,
+            ),
+            (
+                format!("otpauth://totp/a?{valid}&algorithm=md5"),
+                ParseError::UnsupportedAlgorithm,
+            ),
+            (
+                format!("otpauth://totp/a?{valid}&period=0"),
+                ParseError::ZeroPeriod,
+            ),
+        ];
+        for (uri, expected) in cases {
+            assert_eq!(parse(&uri).unwrap_err(), expected, "case {expected:?}");
+        }
+    }
+
+    #[test]
+    fn parse_list_collects_entries_and_errors() {
+        let input = format!(
+            "otpauth://totp/a?secret={SECRET_B32}\n\
+             not-a-uri\n\
+             \n\
+             otpauth://hotp/b?secret={SECRET_B32}&counter=0\n\
+             otpauth://totp/c?secret=@@@\n"
+        );
+        let report = parse_list(&input);
+
+        assert_eq!(report.entries.len(), 2);
+        assert_eq!(report.errors.len(), 2);
+        // Line numbers are 1-based and count the skipped blank line.
+        assert_eq!(report.errors[0].line, 2);
+        assert_eq!(report.errors[0].error, ParseError::NotOtpauth);
+        assert_eq!(report.errors[1].line, 5);
+        assert_eq!(report.errors[1].error, ParseError::MalformedSecret);
     }
 }
