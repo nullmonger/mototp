@@ -1,5 +1,5 @@
 // OTP computation core: HOTP (RFC 4226) and TOTP (RFC 6238).
-// No caller in the binary yet, so the allow silences dead-code lints.
+// No binary callers, so the allow silences dead-code lints.
 // The module is exercised by the tests below.
 #![allow(dead_code)]
 
@@ -95,7 +95,7 @@ pub(crate) fn validate_digits(digits: u32) -> Result<(), OtpError> {
     }
 }
 
-pub fn hotp(algorithm: Algorithm, secret: &[u8], counter: u64, digits: u32) -> String {
+pub(crate) fn hotp(algorithm: Algorithm, secret: &[u8], counter: u64, digits: u32) -> String {
     // Counter is the 8-byte big-endian moving factor (RFC 4226 section 5.1).
     let mac = hmac_digest(algorithm, secret, &counter.to_be_bytes());
     truncate(&mac, digits)
@@ -134,7 +134,7 @@ pub fn totp_now(params: &OtpParams, secret: &[u8]) -> Result<TotpCode, OtpError>
 // and the optional padding is trimmed before decoding.
 pub fn decode_secret(input: &str) -> Result<Vec<u8>, OtpError> {
     let normalized: String = input.chars().filter(|c| !c.is_whitespace()).collect();
-    let normalized = normalized.to_uppercase();
+    let normalized = normalized.to_ascii_uppercase();
     let trimmed = normalized.trim_end_matches('=');
     if trimmed.is_empty() {
         return Err(OtpError::MalformedSecret);

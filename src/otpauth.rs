@@ -1,5 +1,5 @@
 // Parse an otpauth:// URI (Key Uri Format) into an Entry.
-// No caller in the binary yet, so the allow silences dead-code lints.
+// No binary callers, so the allow silences dead-code lints.
 #![allow(dead_code)]
 
 use percent_encoding::percent_decode_str;
@@ -8,6 +8,8 @@ use crate::entry::{Entry, OtpKind};
 use crate::otp::{Algorithm, decode_secret, validate_digits};
 
 // Error messages are static and never include secret material.
+// FIXME: MalformedSecret, UnsupportedDigits and ZeroPeriod duplicate OtpError's
+// variants and messages; wrapping OtpError would avoid the message drift.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ParseError {
     #[error("not an otpauth:// URI")]
@@ -175,8 +177,7 @@ fn percent_decode(s: &str) -> String {
     percent_decode_str(s).decode_utf8_lossy().into_owned()
 }
 
-// Trim surrounding whitespace and drop empty values, so both issuer sources
-// normalize the same way.
+// Normalize both issuer sources the same way: trim, drop if empty.
 fn non_empty(value: Option<String>) -> Option<String> {
     value
         .map(|s| s.trim().to_string())
@@ -245,6 +246,17 @@ mod tests {
         assert_eq!(entry.algorithm, Algorithm::Sha1);
         assert_eq!(entry.digits, 6);
         assert_eq!(entry.kind, OtpKind::Totp { period: 30 });
+    }
+
+    // Label is optional: an issuer-only URI parses with an empty account.
+    #[test]
+    fn accepts_empty_account() {
+        let entry = parse(&format!(
+            "otpauth://totp/?secret={SECRET_B32}&issuer=Example"
+        ))
+        .unwrap();
+        assert_eq!(entry.issuer.as_deref(), Some("Example"));
+        assert_eq!(entry.label, "");
     }
 
     // RFC 6238 Appendix B: t=59, 8 digits -> 94287082.

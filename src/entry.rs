@@ -1,17 +1,18 @@
 // Authenticator entry: a secret and the OTP parameters to compute its code.
-// No caller in the binary yet, so the allow silences dead-code lints.
+// No binary callers, so the allow silences dead-code lints.
 #![allow(dead_code)]
+
+use std::fmt;
 
 use crate::otp::{Algorithm, OtpError, OtpParams, hotp, totp_at, validate_digits};
 
-// Each variant carries the parameter that only makes sense for it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OtpKind {
     Totp { period: u64 },
     Hotp { counter: u64 },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Entry {
     pub issuer: Option<String>,
     pub label: String,
@@ -19,6 +20,23 @@ pub struct Entry {
     pub algorithm: Algorithm,
     pub digits: u32,
     pub kind: OtpKind,
+}
+
+// Custom Debug redacts the secret so it never reaches logs.
+impl fmt::Debug for Entry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Entry")
+            .field("issuer", &self.issuer)
+            .field("label", &self.label)
+            .field(
+                "secret",
+                &format_args!("<redacted; {} bytes>", self.secret.len()),
+            )
+            .field("algorithm", &self.algorithm)
+            .field("digits", &self.digits)
+            .field("kind", &self.kind)
+            .finish()
+    }
 }
 
 impl Entry {
