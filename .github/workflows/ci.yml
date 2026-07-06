@@ -26,6 +26,6 @@ jobs:
     # so a tag can ship without this dx build; decide whether it belongs in the gate.
     container: ghcr.io/nerjs/rust-dx-container:1.2.0
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
       - run: dx build --release --platform desktop
