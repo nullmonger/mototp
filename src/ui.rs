@@ -14,6 +14,7 @@ pub fn app() -> Element {
     let mut load_error = use_signal(|| None::<String>);
     let mut save_error = use_signal(|| None::<String>);
     let mut active_tag = use_signal(|| None::<String>);
+    let mut search_text = use_signal(String::new);
     let store = use_signal(Store::open_default);
 
     use_hook(|| match &*store.read() {
@@ -89,7 +90,11 @@ pub fn app() -> Element {
     };
 
     let all_tags = query::all_tags(&entries.read());
-    let visible = query::visible_indices(&entries.read(), active_tag.read().as_deref());
+    let visible = query::visible_indices(
+        &entries.read(),
+        active_tag.read().as_deref(),
+        &search_text.read(),
+    );
 
     rsx! {
         div {
@@ -101,6 +106,13 @@ pub fn app() -> Element {
                 }
                 if entries.read().is_empty() {
                     p { "No entries yet." }
+                } else if visible.is_empty() {
+                    p { "No matches." }
+                }
+                input {
+                    value: "{search_text}",
+                    placeholder: "search",
+                    oninput: move |event| search_text.set(event.value()),
                 }
                 div {
                     for tag in all_tags {
