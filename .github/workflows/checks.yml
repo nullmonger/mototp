@@ -2,12 +2,10 @@ name: Checks
 
 # Reusable gate: fmt, clippy and tests on the dev toolchain, auto-installed by
 # rustup from rust-toolchain.toml. Deleting that file silently falls back to
-# the runner's bundled Rust. Called by bump-and-release so nothing ships
-# without passing checks, even if a tag points at a commit that never went
-# through the PR CI. Jobs run in parallel.
-#
-# This is a smoke gate on the dev toolchain only; the full version x distro
-# matrix runs in ci.yml on PRs.
+# the Rust bundled in rust-dx-container. Called by ci.yml on every PR
+# and by bump-and-release so nothing ships without passing checks,
+# even if a tag points at a commit that never went through the PR CI.
+# Jobs run in parallel.
 
 on:
   workflow_call:
@@ -18,12 +16,18 @@ permissions:
 jobs:
   fmt:
     runs-on: ubuntu-latest
+    # TODO: bump the container tag together with dioxus upgrades (dx and the
+    # crate must stay in step); consider pinning the image by digest.
+    container: ghcr.io/nerjs/rust-dx-container:1.2.0
     steps:
       - uses: actions/checkout@v6
       - run: cargo fmt --all --check
+      # rsx! bodies are invisible to rustfmt; dx ships the formatter for them.
+      - run: dx fmt --check
 
   clippy:
     runs-on: ubuntu-latest
+    container: ghcr.io/nerjs/rust-dx-container:1.2.0
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
@@ -31,6 +35,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    container: ghcr.io/nerjs/rust-dx-container:1.2.0
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2

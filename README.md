@@ -39,6 +39,20 @@ for the first release rather than what ships today.
 Rust and Dioxus, targeting Linux desktop and Android in the MVP, with macOS,
 Windows and iOS to follow.
 
+## Building
+
+The desktop build links the system WebKit engine. On Linux install the
+development packages first, then `cargo build` as usual:
+
+- Debian/Ubuntu: `libwebkit2gtk-4.1-dev libgtk-3-dev libxdo-dev libssl-dev pkg-config`
+- Arch: `webkit2gtk-4.1 gtk3 xdotool`
+
+Development also uses the Dioxus CLI (`cargo install dioxus-cli`): CI checks
+formatting with `dx fmt` and builds the app with `dx build`.
+
+CI runs in [rust-dx-container](https://github.com/nerjs/rust-dx-container),
+which ships these libraries together with the Dioxus CLI.
+
 ## License
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or

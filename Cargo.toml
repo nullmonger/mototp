@@ -8,8 +8,15 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 data-encoding = "2"
+dioxus = { version = "0.7", features = [] }
 hmac = "0.12"
 percent-encoding = "2"
 sha1 = "0.10"
 sha2 = "0.10"
 thiserror = "2.0.18"
+
+# Platform features in the dx convention: dx build --platform picks the
+# matching feature, plain cargo builds the desktop default.
+[features]
+default = ["desktop"]
+desktop = ["dioxus/desktop"]
