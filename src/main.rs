@@ -3,6 +3,7 @@ use dioxus::desktop::{Config, WindowBuilder};
 mod entry;
 mod otp;
 mod otpauth;
+mod query;
 mod store;
 mod ui;
 

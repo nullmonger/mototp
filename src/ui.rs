@@ -6,12 +6,14 @@ use dioxus::prelude::*;
 
 use crate::entry::{Entry, LiveCode, OtpKind};
 use crate::otp::OtpError;
+use crate::query;
 use crate::store::Store;
 
 pub fn app() -> Element {
     let mut entries = use_signal(Vec::<Entry>::new);
     let mut load_error = use_signal(|| None::<String>);
     let mut save_error = use_signal(|| None::<String>);
+    let mut active_tag = use_signal(|| None::<String>);
     let store = use_signal(Store::open_default);
 
     use_hook(|| match &*store.read() {
@@ -30,8 +32,18 @@ pub fn app() -> Element {
         }
     });
 
-    // FIXME: the handler and the list key identify an entry by its position;
-    // this breaks once the visible list is a filtered subset of the stored one.
+    let mut persist = move || {
+        let saved = match &*store.read() {
+            Ok(opened) => opened.save(&entries.read()).map_err(|e| e.to_string()),
+            Err(error) => Err(error.to_string()),
+        };
+        save_error.set(
+            saved
+                .err()
+                .map(|error| format!("Saving failed, the change is not on disk: {error}")),
+        );
+    };
+
     let mut advance_hotp = move |index: usize| {
         {
             let mut list = entries.write();
@@ -41,20 +53,43 @@ pub fn app() -> Element {
             let OtpKind::Hotp { counter } = &mut entry.kind else {
                 return;
             };
+            // No rollback if the save fails: the code is already on screen,
+            // and rolling the counter back would hand out the same code twice.
             *counter = counter.saturating_add(1);
         }
-        let saved = match &*store.read() {
-            Ok(opened) => opened.save(&entries.read()).map_err(|e| e.to_string()),
-            Err(error) => Err(error.to_string()),
-        };
-        // No rollback if the save fails: the code is already on screen,
-        // and rolling the counter back would hand out the same code twice.
-        save_error.set(
-            saved
-                .err()
-                .map(|error| format!("The counter advanced but saving it failed: {error}")),
-        );
+        persist();
     };
+
+    let mut set_tags = move |index: usize, raw: String| {
+        {
+            let mut list = entries.write();
+            let Some(entry) = list.get_mut(index) else {
+                return;
+            };
+            let mut tags: Vec<String> = Vec::new();
+            for tag in raw.split_whitespace() {
+                if !tags.iter().any(|t| t == tag) {
+                    tags.push(tag.to_string());
+                }
+            }
+            entry.tags = tags;
+        }
+        // If the edit stripped the active tag from its last entry, drop the
+        // filter: otherwise the view is stuck empty with nothing to reset it.
+        let tag_gone = active_tag.peek().as_ref().is_some_and(|tag| {
+            !entries
+                .read()
+                .iter()
+                .any(|entry| entry.tags.iter().any(|t| t == tag))
+        });
+        if tag_gone {
+            active_tag.set(None);
+        }
+        persist();
+    };
+
+    let all_tags = query::all_tags(&entries.read());
+    let visible = query::visible_indices(&entries.read(), active_tag.read().as_deref());
 
     rsx! {
         div {
@@ -67,16 +102,47 @@ pub fn app() -> Element {
                 if entries.read().is_empty() {
                     p { "No entries yet." }
                 }
-                ul {
-                    for (index, entry) in entries().into_iter().enumerate() {
-                        li { key: "{index}",
-                            if let Some(issuer) = entry.issuer.clone() {
-                                span { "{issuer}: " }
+                div {
+                    for tag in all_tags {
+                        {
+                            let is_active = active_tag.read().as_deref() == Some(tag.as_str());
+                            let shown = if is_active { format!("[{tag}]") } else { tag.clone() };
+                            rsx! {
+                                button {
+                                    onclick: move |_| {
+                                        let clicked = tag.clone();
+                                        let same = active_tag.peek().as_deref() == Some(clicked.as_str());
+                                        active_tag.set(if same { None } else { Some(clicked) });
+                                    },
+                                    "{shown}"
+                                }
                             }
-                            span { "{entry.display_label()} " }
-                            {code_cell(&entry, now())}
-                            if matches!(entry.kind, OtpKind::Hotp { .. }) {
-                                button { onclick: move |_| advance_hotp(index), "Next code" }
+                        }
+                    }
+                }
+                ul {
+                    for index in visible {
+                        {
+                            let entry = entries.read()[index].clone();
+                            let tags_text = entry.tags.join(" ");
+                            rsx! {
+                                li { key: "{index}",
+                                    if let Some(issuer) = entry.issuer.clone() {
+                                        span { "{issuer}: " }
+                                    }
+                                    span { "{entry.display_label()} " }
+                                    {code_cell(&entry, now())}
+                                    if matches!(entry.kind, OtpKind::Hotp { .. }) {
+                                        button { onclick: move |_| advance_hotp(index), "Next code" }
+                                    }
+                                    // FIXME: after normalization (dedup, whitespace) the field
+                                    // may keep the raw text while the state holds the clean one.
+                                    input {
+                                        value: "{tags_text}",
+                                        placeholder: "tags",
+                                        onchange: move |event| set_tags(index, event.value()),
+                                    }
+                                }
                             }
                         }
                     }

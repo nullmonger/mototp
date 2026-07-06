@@ -1,6 +1,4 @@
 // TOML storage for the entry set: one file per user, atomic writes.
-// No binary callers, so the allow silences dead-code lints.
-#![allow(dead_code)]
 
 use std::fs;
 use std::io::{self, Write};

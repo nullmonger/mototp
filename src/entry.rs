@@ -1,6 +1,4 @@
 // Authenticator entry: a secret and the OTP parameters to compute its code.
-// No binary callers, so the allow silences dead-code lints.
-#![allow(dead_code)]
 
 use std::fmt;
 
@@ -81,6 +79,8 @@ impl Entry {
         }
     }
 
+    // Tests exercise the RFC vectors through this; the app reads live_code_at.
+    #[allow(dead_code)]
     pub fn code_at(&self, unix_time: u64) -> Result<String, OtpError> {
         Ok(match self.live_code_at(unix_time)? {
             LiveCode::Totp { code, .. } | LiveCode::Hotp { code } => code,
