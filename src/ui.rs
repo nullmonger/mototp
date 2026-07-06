@@ -1,4 +1,5 @@
-// The secret itself never reaches the markup.
+// Stored secrets never reach the markup; the add form is the exception:
+// it echoes the otpauth URI, secret included, while it is being typed.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -6,6 +7,7 @@ use dioxus::prelude::*;
 
 use crate::entry::{Entry, LiveCode, OtpKind};
 use crate::otp::OtpError;
+use crate::otpauth;
 use crate::query;
 use crate::store::Store;
 
@@ -15,6 +17,9 @@ pub fn app() -> Element {
     let mut save_error = use_signal(|| None::<String>);
     let mut active_tag = use_signal(|| None::<String>);
     let mut search_text = use_signal(String::new);
+    let mut add_uri = use_signal(String::new);
+    let mut add_error = use_signal(|| None::<String>);
+    let mut pending_delete = use_signal(|| None::<usize>);
     let store = use_signal(Store::open_default);
 
     use_hook(|| match &*store.read() {
@@ -61,6 +66,20 @@ pub fn app() -> Element {
         persist();
     };
 
+    // If a change stripped the active tag from its last entry,
+    // drop the filter: otherwise the view is stuck empty with nothing to reset it.
+    let mut drop_stale_tag = move || {
+        let tag_gone = active_tag.peek().as_ref().is_some_and(|tag| {
+            !entries
+                .read()
+                .iter()
+                .any(|entry| entry.tags.iter().any(|t| t == tag))
+        });
+        if tag_gone {
+            active_tag.set(None);
+        }
+    };
+
     let mut set_tags = move |index: usize, raw: String| {
         {
             let mut list = entries.write();
@@ -75,17 +94,61 @@ pub fn app() -> Element {
             }
             entry.tags = tags;
         }
-        // If the edit stripped the active tag from its last entry, drop the
-        // filter: otherwise the view is stuck empty with nothing to reset it.
-        let tag_gone = active_tag.peek().as_ref().is_some_and(|tag| {
-            !entries
-                .read()
-                .iter()
-                .any(|entry| entry.tags.iter().any(|t| t == tag))
-        });
-        if tag_gone {
-            active_tag.set(None);
+        drop_stale_tag();
+        persist();
+    };
+
+    let mut set_display_name = move |index: usize, raw: String| {
+        {
+            let mut list = entries.write();
+            let Some(entry) = list.get_mut(index) else {
+                return;
+            };
+            let trimmed = raw.trim();
+            entry.display_name = if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            };
         }
+        persist();
+    };
+
+    let mut add_entry = move || {
+        let uri = add_uri.peek().trim().to_string();
+        if uri.is_empty() {
+            return;
+        }
+        match otpauth::parse(&uri) {
+            Ok(entry) => {
+                entries.write().push(entry);
+                add_uri.set(String::new());
+                add_error.set(None);
+                // The new entry has no tags, so an active filter or search
+                // would hide it and the add would look like a silent failure.
+                active_tag.set(None);
+                search_text.set(String::new());
+                persist();
+            }
+            Err(error) => add_error.set(Some(error.to_string())),
+        }
+    };
+
+    let mut remove_entry = move |index: usize| {
+        // Only the armed row may confirm: a stale click that arrives after
+        // the list shifted must not remove whatever moved onto this index.
+        if *pending_delete.peek() != Some(index) {
+            return;
+        }
+        {
+            let mut list = entries.write();
+            if index >= list.len() {
+                return;
+            }
+            list.remove(index);
+        }
+        pending_delete.set(None);
+        drop_stale_tag();
         persist();
     };
 
@@ -109,10 +172,24 @@ pub fn app() -> Element {
                 } else if visible.is_empty() {
                     p { "No matches." }
                 }
+                div {
+                    input {
+                        value: "{add_uri}",
+                        placeholder: "otpauth:// URI",
+                        oninput: move |event| add_uri.set(event.value()),
+                    }
+                    button { onclick: move |_| add_entry(), "Add" }
+                    if let Some(error) = add_error() {
+                        span { " {error}" }
+                    }
+                }
                 input {
                     value: "{search_text}",
                     placeholder: "search",
-                    oninput: move |event| search_text.set(event.value()),
+                    oninput: move |event| {
+                        search_text.set(event.value());
+                        pending_delete.set(None);
+                    },
                 }
                 div {
                     for tag in all_tags {
@@ -125,6 +202,7 @@ pub fn app() -> Element {
                                         let clicked = tag.clone();
                                         let same = active_tag.peek().as_deref() == Some(clicked.as_str());
                                         active_tag.set(if same { None } else { Some(clicked) });
+                                        pending_delete.set(None);
                                     },
                                     "{shown}"
                                 }
@@ -137,7 +215,10 @@ pub fn app() -> Element {
                         {
                             let entry = entries.read()[index].clone();
                             let tags_text = entry.tags.join(" ");
+                            let name_text = entry.display_name.clone().unwrap_or_default();
                             rsx! {
+                                // FIXME: the list key is the storage index, not a stable identity;
+                                // after a deletion the DOM rows can inherit a neighbour's focus/input.
                                 li { key: "{index}",
                                     if let Some(issuer) = entry.issuer.clone() {
                                         span { "{issuer}: " }
@@ -147,12 +228,22 @@ pub fn app() -> Element {
                                     if matches!(entry.kind, OtpKind::Hotp { .. }) {
                                         button { onclick: move |_| advance_hotp(index), "Next code" }
                                     }
-                                    // FIXME: after normalization (dedup, whitespace) the field
-                                    // may keep the raw text while the state holds the clean one.
+                                    // FIXME: the name and tags inputs normalize their value on commit;
+                                    // the field may keep the raw text while the state holds the clean one.
+                                    input {
+                                        value: "{name_text}",
+                                        placeholder: "name",
+                                        onchange: move |event| set_display_name(index, event.value()),
+                                    }
                                     input {
                                         value: "{tags_text}",
                                         placeholder: "tags",
                                         onchange: move |event| set_tags(index, event.value()),
+                                    }
+                                    if pending_delete() == Some(index) {
+                                        button { onclick: move |_| remove_entry(index), "Confirm delete" }
+                                    } else {
+                                        button { onclick: move |_| pending_delete.set(Some(index)), "Delete" }
                                     }
                                 }
                             }

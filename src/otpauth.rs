@@ -1,6 +1,4 @@
 // Parse an otpauth:// URI (Key Uri Format) into an Entry.
-// No binary callers, so the allow silences dead-code lints.
-#![allow(dead_code)]
 
 use percent_encoding::percent_decode_str;
 
@@ -116,12 +114,15 @@ pub fn parse(uri: &str) -> Result<Entry, ParseError> {
     })
 }
 
+// The list import has no UI entry point; tests keep it alive.
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq)]
 pub struct LineError {
     pub line: usize,
     pub error: ParseError,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct ParseReport {
     pub entries: Vec<Entry>,
@@ -130,6 +131,7 @@ pub struct ParseReport {
 
 // Accumulate per-line errors instead of failing on the first bad line,
 // so one broken line does not drop the rest of an import.
+#[allow(dead_code)]
 pub fn parse_list(input: &str) -> ParseReport {
     let mut report = ParseReport::default();
     for (index, line) in input.lines().enumerate() {
