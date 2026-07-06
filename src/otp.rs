@@ -36,7 +36,7 @@ impl Default for OtpParams {
 }
 
 // Error messages are static and never include secret material.
-#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum OtpError {
     #[error("TOTP period must be greater than zero")]
     ZeroPeriod,

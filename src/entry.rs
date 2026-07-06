@@ -4,7 +4,7 @@
 
 use std::fmt;
 
-use crate::otp::{Algorithm, OtpError, OtpParams, hotp, totp_at, validate_digits};
+use crate::otp::{Algorithm, OtpError, OtpParams, TotpCode, hotp, totp_at, validate_digits};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OtpKind {
@@ -44,6 +44,12 @@ impl fmt::Debug for Entry {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LiveCode {
+    Totp { code: String, remaining: u64 },
+    Hotp { code: String },
+}
+
 impl Entry {
     pub fn display_label(&self) -> &str {
         match &self.display_name {
@@ -53,7 +59,7 @@ impl Entry {
     }
 
     // TOTP needs the time; HOTP ignores it and uses its stored counter.
-    pub fn code_at(&self, unix_time: u64) -> Result<String, OtpError> {
+    pub fn live_code_at(&self, unix_time: u64) -> Result<LiveCode, OtpError> {
         match self.kind {
             OtpKind::Totp { period } => {
                 let params = OtpParams {
@@ -62,14 +68,23 @@ impl Entry {
                     period,
                     t0: 0,
                 };
-                Ok(totp_at(&params, &self.secret, unix_time)?.code)
+                let TotpCode { code, remaining } = totp_at(&params, &self.secret, unix_time)?;
+                Ok(LiveCode::Totp { code, remaining })
             }
             OtpKind::Hotp { counter } => {
                 // hotp does not guard the digit range, so check before calling.
                 validate_digits(self.digits)?;
-                Ok(hotp(self.algorithm, &self.secret, counter, self.digits))
+                Ok(LiveCode::Hotp {
+                    code: hotp(self.algorithm, &self.secret, counter, self.digits),
+                })
             }
         }
+    }
+
+    pub fn code_at(&self, unix_time: u64) -> Result<String, OtpError> {
+        Ok(match self.live_code_at(unix_time)? {
+            LiveCode::Totp { code, .. } | LiveCode::Hotp { code } => code,
+        })
     }
 }
 
