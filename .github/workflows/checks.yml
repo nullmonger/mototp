@@ -1,11 +1,9 @@
 name: Checks
 
-# Reusable gate: fmt, clippy and tests on the dev toolchain, auto-installed by
-# rustup from rust-toolchain.toml. Deleting that file silently falls back to
-# the Rust bundled in rust-dx-container. Called by ci.yml on every PR
-# and by bump-and-release so nothing ships without passing checks,
-# even if a tag points at a commit that never went through the PR CI.
-# Jobs run in parallel.
+# Reusable gate: fmt, clippy and tests on the dev toolchain from rust-toolchain.toml.
+# Deleting that file silently falls back to the Rust bundled in rust-dx-container.
+# Both CI and the release flow call this gate,
+# so a tag cannot ship a commit that never passed the checks.
 
 on:
   workflow_call:
@@ -16,8 +14,8 @@ permissions:
 jobs:
   fmt:
     runs-on: ubuntu-latest
-    # TODO: bump the container tag together with dioxus upgrades (dx and the
-    # crate must stay in step); consider pinning the image by digest.
+    # TODO: bump the container tag together with dioxus upgrades;
+    # dx and the crate must stay in step. Consider pinning the image by digest.
     container: ghcr.io/nerjs/rust-dx-container:1.2.0
     steps:
       - uses: actions/checkout@v6

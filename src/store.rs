@@ -31,6 +31,8 @@ pub enum StoreError {
     InvalidEntry { index: usize, problem: &'static str },
 }
 
+// FIXME: nothing guards against a second running instance; concurrent saves
+// are last-write-wins and can drop each other's changes.
 pub struct Store {
     path: PathBuf,
 }
@@ -69,13 +71,15 @@ impl Store {
     }
 
     pub fn save(&self, entries: &[Entry]) -> Result<(), StoreError> {
-        // An empty secret would serialize fine and then fail every load;
+        // An invalid entry would serialize fine and then fail every load;
         // reject it in save so one bad write cannot brick the whole store.
-        if let Some(position) = entries.iter().position(|entry| entry.secret.is_empty()) {
-            return Err(StoreError::InvalidEntry {
-                index: position + 1,
-                problem: "secret is empty",
-            });
+        for (position, entry) in entries.iter().enumerate() {
+            if let Some(problem) = entry_problem(entry) {
+                return Err(StoreError::InvalidEntry {
+                    index: position + 1,
+                    problem,
+                });
+            }
         }
         let document = Document {
             version: FORMAT_VERSION,
@@ -83,6 +87,23 @@ impl Store {
         };
         let text = toml::to_string(&document)?;
         write_bytes_atomic(&self.path, text.as_bytes()).map_err(StoreError::Write)
+    }
+}
+
+// The invariants load enforces; whatever save writes must load back.
+fn entry_problem(entry: &Entry) -> Option<&'static str> {
+    if entry.secret.is_empty() {
+        return Some("secret is empty");
+    }
+    if validate_digits(entry.digits).is_err() {
+        return Some("code length must be 6 to 8 digits");
+    }
+    // TOML integers are i64; a larger value would fail serialization.
+    match entry.kind {
+        OtpKind::Totp { period: 0 } => Some("TOTP period must be greater than zero"),
+        OtpKind::Totp { period } if period > i64::MAX as u64 => Some("TOTP period is too large"),
+        OtpKind::Hotp { counter } if counter > i64::MAX as u64 => Some("HOTP counter is too large"),
+        _ => None,
     }
 }
 
@@ -222,15 +243,33 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let dir = path
         .parent()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "store path has no parent"))?;
-    fs::create_dir_all(dir)?;
-    let tmp = path.with_extension("toml.tmp");
-    let mut file = fs::File::create(&tmp)?;
-    // The file holds plaintext secrets: owner-only access.
+    // The directory and the file hold plaintext secrets: owner-only access,
+    // set at creation so no window is open while the secrets are written.
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        file.set_permissions(fs::Permissions::from_mode(0o600))?;
+        use std::os::unix::fs::DirBuilderExt;
+        fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(dir)?;
     }
+    #[cfg(not(unix))]
+    fs::create_dir_all(dir)?;
+    let tmp = path.with_extension("toml.tmp");
+    // A crash leftover .tmp may carry looser permissions; recreate it fresh.
+    match fs::remove_file(&tmp) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&tmp)?;
     file.write_all(bytes)?;
     file.sync_all()?;
     drop(file);

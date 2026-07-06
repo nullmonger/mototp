@@ -5,9 +5,9 @@ use percent_encoding::percent_decode_str;
 use crate::entry::{Entry, OtpKind};
 use crate::otp::{Algorithm, decode_secret, validate_digits};
 
-// Error messages are static and never include secret material.
-// FIXME: MalformedSecret, UnsupportedDigits and ZeroPeriod duplicate OtpError's
-// variants and messages; wrapping OtpError would avoid the message drift.
+// Same contract as OtpError: static messages, never any secret material.
+// FIXME: MalformedSecret, UnsupportedDigits and ZeroPeriod duplicate OtpError;
+// store.rs repeats the texts a third time. Wrapping OtpError would stop the drift.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ParseError {
     #[error("not an otpauth:// URI")]
@@ -86,7 +86,7 @@ pub fn parse(uri: &str) -> Result<Entry, ParseError> {
         OtpType::Totp => {
             let period = match params.get("period") {
                 None => 30,
-                Some(p) => p.parse::<u64>().map_err(|_| ParseError::InvalidNumber)?,
+                Some(p) => parse_toml_safe_u64(&p)?,
             };
             if period == 0 {
                 return Err(ParseError::ZeroPeriod);
@@ -95,10 +95,9 @@ pub fn parse(uri: &str) -> Result<Entry, ParseError> {
         }
         OtpType::Hotp => {
             let counter_str = params.get("counter").ok_or(ParseError::MissingCounter)?;
-            let counter = counter_str
-                .parse::<u64>()
-                .map_err(|_| ParseError::InvalidNumber)?;
-            OtpKind::Hotp { counter }
+            OtpKind::Hotp {
+                counter: parse_toml_safe_u64(&counter_str)?,
+            }
         }
     };
 
@@ -179,6 +178,17 @@ impl QueryParams {
 
 fn percent_decode(s: &str) -> String {
     percent_decode_str(s).decode_utf8_lossy().into_owned()
+}
+
+// TOML integers are i64: a larger counter or period would poison every save.
+fn parse_toml_safe_u64(value: &str) -> Result<u64, ParseError> {
+    let number = value
+        .parse::<u64>()
+        .map_err(|_| ParseError::InvalidNumber)?;
+    if number > i64::MAX as u64 {
+        return Err(ParseError::InvalidNumber);
+    }
+    Ok(number)
 }
 
 // Normalize both issuer sources the same way: trim, drop if empty.
@@ -299,6 +309,11 @@ mod tests {
             ),
             (
                 format!("otpauth://totp/a?{valid}&digits=abc"),
+                ParseError::InvalidNumber,
+            ),
+            (
+                // One past i64::MAX: representable in u64, not in TOML.
+                format!("otpauth://hotp/a?{valid}&counter=9223372036854775808"),
                 ParseError::InvalidNumber,
             ),
             (

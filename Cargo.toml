@@ -19,8 +19,8 @@ thiserror = "2.0.18"
 tokio = { version = "1.52.3", features = ["time"] }
 toml = "1.1.2"
 
-# Platform features in the dx convention: dx build --platform picks the
-# matching feature, plain cargo builds the desktop default.
+# Platform features in the dx convention:
+# dx build --platform picks the matching feature, plain cargo builds the default.
 [features]
 default = ["desktop"]
 desktop = ["dioxus/desktop"]

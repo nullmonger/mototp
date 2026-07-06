@@ -47,6 +47,17 @@ pub fn visible_indices(
     indices
 }
 
+// Whitespace-separated, first occurrence wins: editing must not reorder tags.
+pub fn parse_tags(raw: &str) -> Vec<String> {
+    let mut tags: Vec<String> = Vec::new();
+    for tag in raw.split_whitespace() {
+        if !tags.iter().any(|t| t == tag) {
+            tags.push(tag.to_string());
+        }
+    }
+    tags
+}
+
 pub fn all_tags(entries: &[Entry]) -> Vec<String> {
     let mut tags: Vec<String> = entries
         .iter()
@@ -124,5 +135,14 @@ mod tests {
     fn all_tags_sorted_and_deduplicated() {
         let list = vec![entry("a", &["work", "mail"]), entry("b", &["mail", "home"])];
         assert_eq!(all_tags(&list), vec!["home", "mail", "work"]);
+    }
+
+    #[test]
+    fn parse_tags_dedups_and_keeps_order() {
+        assert_eq!(
+            parse_tags("work mail work  home"),
+            vec!["work", "mail", "home"]
+        );
+        assert_eq!(parse_tags("   "), Vec::<String>::new());
     }
 }

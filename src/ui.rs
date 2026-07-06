@@ -11,6 +11,7 @@ use crate::otpauth;
 use crate::query;
 use crate::store::Store;
 
+// TODO: split app() into components (entry row, add form, filter bar).
 pub fn app() -> Element {
     let mut entries = use_signal(Vec::<Entry>::new);
     let mut load_error = use_signal(|| None::<String>);
@@ -86,13 +87,7 @@ pub fn app() -> Element {
             let Some(entry) = list.get_mut(index) else {
                 return;
             };
-            let mut tags: Vec<String> = Vec::new();
-            for tag in raw.split_whitespace() {
-                if !tags.iter().any(|t| t == tag) {
-                    tags.push(tag.to_string());
-                }
-            }
-            entry.tags = tags;
+            entry.tags = query::parse_tags(&raw);
         }
         drop_stale_tag();
         persist();
@@ -124,8 +119,8 @@ pub fn app() -> Element {
                 entries.write().push(entry);
                 add_uri.set(String::new());
                 add_error.set(None);
-                // The new entry has no tags, so an active filter or search
-                // would hide it and the add would look like a silent failure.
+                // The new entry has no tags,
+                // so an active filter or search would hide it and the add would look like a silent failure.
                 active_tag.set(None);
                 search_text.set(String::new());
                 persist();
@@ -135,8 +130,8 @@ pub fn app() -> Element {
     };
 
     let mut remove_entry = move |index: usize| {
-        // Only the armed row may confirm: a stale click that arrives after
-        // the list shifted must not remove whatever moved onto this index.
+        // Only the armed row may confirm:
+        // a stale click after a list shift must not remove whatever moved onto this index.
         if *pending_delete.peek() != Some(index) {
             return;
         }
@@ -218,7 +213,8 @@ pub fn app() -> Element {
                             let name_text = entry.display_name.clone().unwrap_or_default();
                             rsx! {
                                 // FIXME: the list key is the storage index, not a stable identity;
-                                // after a deletion the DOM rows can inherit a neighbour's focus/input.
+                                // after a deletion the DOM rows can inherit a neighbour's focus/input,
+                                // and a stale event can hit whatever entry moved onto the index.
                                 li { key: "{index}",
                                     if let Some(issuer) = entry.issuer.clone() {
                                         span { "{issuer}: " }

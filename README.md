@@ -11,7 +11,7 @@ into a password.
 
 ## Features
 
-- TOTP (RFC 6238) and HOTP (RFC 4226): SHA-1/256/512, 6 or 8 digits, custom period
+- TOTP (RFC 6238) and HOTP (RFC 4226): SHA-1/256/512, 6 to 8 digits, custom period
 - otpauth:// import via QR (phone camera, desktop screenshot picker) or manual entry
 - encrypted dump of the whole secret set into a single master-password file,
   moved between devices by hand
@@ -31,8 +31,10 @@ into a password.
 
 ## Status
 
-Early development. The crate is set up, and the feature set above is the target
-for the first release rather than what ships today.
+Early development. The desktop app already shows live TOTP/HOTP codes,
+imports otpauth:// URIs, keeps the entries in a plain TOML file and supports
+tags, search, renaming and deletion. The rest of the list above - QR import,
+icons, encryption at rest, LAN sync, exports, Android - is still to come.
 
 ## Built with
 

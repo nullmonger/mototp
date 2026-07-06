@@ -1,9 +1,4 @@
 // OTP computation core: HOTP (RFC 4226) and TOTP (RFC 6238).
-// No binary callers, so the allow silences dead-code lints.
-// The module is exercised by the tests below.
-#![allow(dead_code)]
-
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use hmac::{Hmac, Mac};
 use sha1::Sha1;
@@ -84,9 +79,9 @@ fn truncate(mac: &[u8], digits: u32) -> String {
     format!("{code:0width$}", width = digits as usize)
 }
 
-// Single source of truth for the supported code length. Values outside 6..=8
-// overflow the modulo in truncate or produce a meaningless code; hotp itself
-// stays unguarded, so every entry point validates through here first.
+// Single source of truth for the supported code length.
+// Values outside 6..=8 overflow the modulo in truncate or produce garbage;
+// hotp itself stays unguarded, so every entry point validates through here.
 pub(crate) fn validate_digits(digits: u32) -> Result<(), OtpError> {
     if (6..=8).contains(&digits) {
         Ok(())
@@ -119,14 +114,6 @@ pub fn totp_at(params: &OtpParams, secret: &[u8], unix_time: u64) -> Result<Totp
     let remaining = params.period - (elapsed % params.period);
     let code = hotp(params.algorithm, secret, counter, params.digits);
     Ok(TotpCode { code, remaining })
-}
-
-pub fn totp_now(params: &OtpParams, secret: &[u8]) -> Result<TotpCode, OtpError> {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| OtpError::ClockBeforeEpoch)?
-        .as_secs();
-    totp_at(params, secret, now)
 }
 
 // Decode an otpauth:// base32 secret (RFC 4648). Input is normalized first:
@@ -165,8 +152,8 @@ mod tests {
         }
     }
 
-    // RFC 6238 Appendix B: per-algorithm secrets (SHA-256/512 are not the same
-    // 20-byte seed as SHA-1), period 30, T0 = 0, 8 digits.
+    // RFC 6238 Appendix B: period 30, T0 = 0, 8 digits.
+    // SHA-256/512 use their own longer secrets, not the 20-byte SHA-1 seed.
     #[test]
     fn totp_rfc6238_appendix_b() {
         let sha1 = b"12345678901234567890".as_slice();

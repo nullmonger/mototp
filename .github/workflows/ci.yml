@@ -22,8 +22,8 @@ jobs:
   build:
     needs: checks
     runs-on: ubuntu-latest
-    # TODO: bump-and-release runs checks.yml only, so a tag can ship without
-    # this dx build having run; decide whether it belongs in the gate.
+    # TODO: bump-and-release runs checks.yml only,
+    # so a tag can ship without this dx build; decide whether it belongs in the gate.
     container: ghcr.io/nerjs/rust-dx-container:1.2.0
     steps:
       - uses: actions/checkout@v6
