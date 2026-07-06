@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 mod entry;
 mod otp;
 mod otpauth;
+mod store;
 
 fn main() {
     dioxus::LaunchBuilder::desktop()

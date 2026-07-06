@@ -107,10 +107,12 @@ pub fn parse(uri: &str) -> Result<Entry, ParseError> {
     Ok(Entry {
         issuer,
         label: account,
+        display_name: None,
         secret,
         algorithm,
         digits,
         kind,
+        tags: Vec::new(),
     })
 }
 

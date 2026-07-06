@@ -16,10 +16,13 @@ pub enum OtpKind {
 pub struct Entry {
     pub issuer: Option<String>,
     pub label: String,
+    // User-editable alias shown instead of the imported label when set.
+    pub display_name: Option<String>,
     pub secret: Vec<u8>,
     pub algorithm: Algorithm,
     pub digits: u32,
     pub kind: OtpKind,
+    pub tags: Vec<String>,
 }
 
 // Custom Debug redacts the secret so it never reaches logs.
@@ -28,6 +31,7 @@ impl fmt::Debug for Entry {
         f.debug_struct("Entry")
             .field("issuer", &self.issuer)
             .field("label", &self.label)
+            .field("display_name", &self.display_name)
             .field(
                 "secret",
                 &format_args!("<redacted; {} bytes>", self.secret.len()),
@@ -35,11 +39,19 @@ impl fmt::Debug for Entry {
             .field("algorithm", &self.algorithm)
             .field("digits", &self.digits)
             .field("kind", &self.kind)
+            .field("tags", &self.tags)
             .finish()
     }
 }
 
 impl Entry {
+    pub fn display_label(&self) -> &str {
+        match &self.display_name {
+            Some(name) if !name.trim().is_empty() => name,
+            _ => &self.label,
+        }
+    }
+
     // TOTP needs the time; HOTP ignores it and uses its stored counter.
     pub fn code_at(&self, unix_time: u64) -> Result<String, OtpError> {
         match self.kind {
@@ -71,10 +83,12 @@ mod tests {
         let entry = Entry {
             issuer: Some("Example".into()),
             label: "alice".into(),
+            display_name: None,
             secret: b"12345678901234567890".to_vec(),
             algorithm: Algorithm::Sha1,
             digits: 8,
             kind: OtpKind::Totp { period: 30 },
+            tags: vec![],
         };
         assert_eq!(entry.code_at(59).unwrap(), "94287082");
     }
@@ -85,10 +99,12 @@ mod tests {
         let entry = |counter| Entry {
             issuer: None,
             label: "alice".into(),
+            display_name: None,
             secret: b"12345678901234567890".to_vec(),
             algorithm: Algorithm::Sha1,
             digits: 6,
             kind: OtpKind::Hotp { counter },
+            tags: vec![],
         };
         assert_eq!(entry(0).code_at(0).unwrap(), "755224");
         assert_eq!(entry(1).code_at(0).unwrap(), "287082");
@@ -100,11 +116,33 @@ mod tests {
         let entry = Entry {
             issuer: None,
             label: "alice".into(),
+            display_name: None,
             secret: b"12345678901234567890".to_vec(),
             algorithm: Algorithm::Sha1,
             digits: 9,
             kind: OtpKind::Hotp { counter: 0 },
+            tags: vec![],
         };
         assert_eq!(entry.code_at(0), Err(OtpError::UnsupportedDigits));
+    }
+
+    // A blank alias must not blank the list: fall back to the label.
+    #[test]
+    fn display_label_falls_back_to_label() {
+        let mut entry = Entry {
+            issuer: None,
+            label: "alice".into(),
+            display_name: None,
+            secret: b"12345678901234567890".to_vec(),
+            algorithm: Algorithm::Sha1,
+            digits: 6,
+            kind: OtpKind::Hotp { counter: 0 },
+            tags: vec![],
+        };
+        assert_eq!(entry.display_label(), "alice");
+        entry.display_name = Some("  ".into());
+        assert_eq!(entry.display_label(), "alice");
+        entry.display_name = Some("Work mail".into());
+        assert_eq!(entry.display_label(), "Work mail");
     }
 }
